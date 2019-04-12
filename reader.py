@@ -106,8 +106,8 @@ def convert_training_to_compressed_numpy():
             x_train = []
             y_train = []
 
-            img = nib.load(trainingData[0]["image"]).get_fdata()
-            label = nib.load(trainingData[0]["label"]).get_fdata()
+            img = nib.load(row["image"]).get_fdata()
+            label = nib.load(row["label"]).get_fdata()
 
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:
@@ -125,8 +125,8 @@ def convert_training_to_compressed_numpy():
             x_train = []
             y_train = []
 
-            img = nib.load(trainingData[0]["image"]).get_fdata()
-            label = nib.load(trainingData[0]["label"]).get_fdata()
+            img = nib.load(row["image"]).get_fdata()
+            label = nib.load(row["label"]).get_fdata()
 
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:

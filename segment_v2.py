@@ -94,14 +94,23 @@ y_train = []
 counter = 0
 limit = 20
 
+weightTest1 = 0
+weightTest0 = 0
+
 for filename in os.listdir("compressed_data"):
     if counter < limit:
         print(("Reading image {} of {}.").format(counter+1, limit))
-        y_train.append(np.load(("compressed_data/{}").format(filename))["y"])
+        #y_train.append(np.load(("compressed_data/{}").format(filename))["y"])
+        unique, counts = np.unique(np.load(("compressed_data/{}").format(filename))["y"], return_counts=True)
+        weightTest1 += counts[1]
+        weightTest0 += counts[0]
     counter+=1
 
+class_weights = [1, weightTest0/weightTest1]
+print(("Current weights: 0:{}, 1:{}").format(1, weightTest0/weightTest1))
+
 x_train = np.array(x_train)
-y_train = np.array(y_train)
+y_train = np.array(y_train).flatten()
 
 model = keras.models.Sequential()
 
@@ -181,10 +190,15 @@ if False:
     val_generator = combine_generator(x_val, y_val)
 
 
-class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.flatten())
+#class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
+#class_weights = [1, 100]
 
 batch_size = 256
 epochs = 512
+
+names = []
+for filename in os.listdir("compressed_data"):
+    names.append(("compressed_data/{}").format(filename))
 
 if False:
     for i in range(50):
@@ -203,18 +217,14 @@ if False:
                     #print(np.unique(img[1][i-1, :, :, 0]))
         plt.show()
 
-names = []
-for filename in os.listdir("compressed_data"):
-    names.append(("compressed_data/{}").format(filename))
-
 validation = []
 for filename in os.listdir("compressed_validation"):
     validation.append(("compressed_validation/{}").format(filename))
 
-checkpointer = ModelCheckpoint("best_v2.sav", monitor='val_loss',
+checkpointer = ModelCheckpoint("best_v3.sav", monitor='val_loss',
     verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
 earlyStopper = EarlyStopping(monitor='val_loss', min_delta=0,
-    patience=10, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
+    patience=20, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
 history = model.fit_generator(custom_generator(names), batch_size,
     epochs=epochs, class_weight=class_weights, validation_data=custom_generator(validation),
     validation_steps=2, shuffle=True, callbacks=[checkpointer, earlyStopper])

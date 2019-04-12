@@ -1,4 +1,6 @@
 from keras.models import load_model
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import numpy as np
 import pickle
@@ -61,7 +63,7 @@ if True:
     plt.legend(['vgg_train', 'vgg_val', 'my_train', 'my_val'], loc='upper left')
     plt.show()
 
-if True:
+if False:
     for k in range(10):
         og = custom_generator(validation).next()
         for i in range(og[0].shape[0]):
