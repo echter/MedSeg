@@ -50,7 +50,7 @@ validation = []
 for filename in os.listdir("compressed_validation"):
     validation.append(("compressed_validation/{}").format(filename))
 
-model = load_model('best.sav')
+model = load_model('best_v3.sav')
 
 if True:
     with open("history/trainHistoryDict", "rb") as input_file:

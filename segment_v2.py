@@ -92,7 +92,7 @@ x_train = []
 y_train = []
 
 counter = 0
-limit = 20
+limit = 40
 
 weightTest1 = 0
 weightTest0 = 0
@@ -114,7 +114,7 @@ y_train = np.array(y_train).flatten()
 
 model = keras.models.Sequential()
 
-baseFilter = 4
+baseFilter = 5
 
 inputs = Input((512, 512, 1))
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
@@ -159,7 +159,7 @@ conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
 
 model = Model(input=inputs, output=conv10)
 
-model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(lr=1e-5), loss='binary_crossentropy', metrics=['accuracy'])
 
 args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
@@ -193,8 +193,8 @@ if False:
 #class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
 #class_weights = [1, 100]
 
-batch_size = 256
-epochs = 512
+batch_size = 128
+epochs = 128
 
 names = []
 for filename in os.listdir("compressed_data"):
