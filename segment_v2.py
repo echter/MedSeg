@@ -2,6 +2,7 @@ import keras
 import os
 import numpy as np
 import pickle
+from sklearn.preprocessing import MinMaxScaler
 from keras.layers import Conv2D, UpSampling2D, MaxPooling2D, Input, Dropout, concatenate
 from keras.models import Model
 from keras.optimizers import Adam
@@ -10,8 +11,6 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 from matplotlib import pyplot as plt
 from sklearn.utils import class_weight
 from keras import backend as K
-
-
 
 def weighted_categorical_crossentropy(weights):
     """
@@ -58,7 +57,7 @@ def get_output(path):
     image = np.load(("{}").format(path))["y"]
     return image
 
-def custom_generator(files, batch_size = 1):
+def custom_generator(files, batch_size = 16):
 
     while True:
 
@@ -76,6 +75,12 @@ def custom_generator(files, batch_size = 1):
             output = get_output(input_path)
 
             #preprocessing
+	    rInt = np.random.randint(1, input.shape[0], 1)
+	    input = input[rInt, : , :]
+	    output = output[rInt, :, :]
+	    mmScale = MinMaxScaler()
+	    input = mmScale.fit_transform(input.reshape(512, 512))
+	    input = input.reshape(1, 512, 512)
 
             batch_input += [input]
             batch_output += [output]
@@ -159,7 +164,7 @@ conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
 
 model = Model(input=inputs, output=conv10)
 
-model.compile(optimizer=Adam(lr=1e-5), loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
 
 args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
@@ -193,7 +198,7 @@ if False:
 #class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
 #class_weights = [1, 100]
 
-batch_size = 128
+batch_size = 16
 epochs = 128
 
 names = []
