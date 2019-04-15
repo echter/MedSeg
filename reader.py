@@ -103,43 +103,49 @@ def convert_training_to_compressed_numpy():
     for row in trainingData:
         print(row)
         if counter < 41:
-            x_train = []
-            y_train = []
+            #x_train = []
+            #y_train = []
 
             img = nib.load(row["image"]).get_fdata()
             label = nib.load(row["label"]).get_fdata()
 
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:
-                    x_train.append(img[:,:,i])
-                    y_train.append(label[:,:,i])
+                    counts = dict(zip(np.unique(label[:,:,i], return_counts=True)[0], np.unique(label[:,:,i], return_counts=True)[1]))
+                    if (counts[1] > 500):
+                        x_train = np.array(img[:,:,i])
+                        y_train = np.array(label[:,:,i])
+                        np.savez_compressed(("compressed_data_individual/{}_{}").format(row["image"].split("/")[-1], i), x=x_train, y=y_train)
 
             counter += 1
             print("Reading slice: ", counter, " of: ", len(trainingData))
 
-            x_train = np.array(x_train)
-            y_train = np.array(y_train)
+            #x_train = np.array(x_train)
+            #y_train = np.array(y_train)
 
-            np.savez_compressed(("compressed_data/{}").format(row["image"].split("/")[-1]), x=x_train, y=y_train)
+            #np.savez_compressed(("compressed_data/{}").format(row["image"].split("/")[-1]), x=x_train, y=y_train)
         else:
-            x_train = []
-            y_train = []
+            #x_train = []
+            #y_train = []
 
             img = nib.load(row["image"]).get_fdata()
             label = nib.load(row["label"]).get_fdata()
 
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:
-                    x_train.append(img[:,:,i])
-                    y_train.append(label[:,:,i])
+                    counts = dict(zip(np.unique(label[:,:,i], return_counts=True)[0], np.unique(label[:,:,i], return_counts=True)[1]))
+                    if (counts[1] > 500):
+                        x_train = np.array(img[:,:,i])
+                        y_train = np.array(label[:,:,i])
+                        np.savez_compressed(("compressed_validation_individual/{}_{}").format(row["image"].split("/")[-1], i), x=x_train, y=y_train)
 
             counter += 1
             print("Reading slice: ", counter, " of: ", len(trainingData))
 
-            x_train = np.array(x_train)
-            y_train = np.array(y_train)
+            #x_train = np.array(x_train)
+            #y_train = np.array(y_train)
 
-            np.savez_compressed(("compressed_validation/{}").format(row["image"].split("/")[-1]), x=x_train, y=y_train)
+            #np.savez_compressed(("compressed_validation/{}").format(row["image"].split("/")[-1]), x=x_train, y=y_train)
 
 convert_training_to_compressed_numpy()
 #generate_validation_data()
