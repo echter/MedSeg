@@ -57,7 +57,7 @@ def get_output(path):
     image = np.load(("{}").format(path))["y"]
     return image
 
-def custom_generator(files, batch_size=16):
+def custom_generator(files, batch_size=1):
     # TODO only keep data which has more than x pixels. Currently some images with like 0 pixels are allowed which is bad
 
     args = dict(rotation_range=0,
@@ -82,59 +82,64 @@ def custom_generator(files, batch_size=16):
 
         # TODO make this select a bunch of random slices isntead of the whole set from 1 image
         for input_path in batch_path:
-            input = get_input(input_path)
-            output = get_output(input_path)
+            inputO = get_input(input_path)
+            outputO = get_output(input_path)
 
-            rInt = np.random.randint(1, input.shape[0], 1)
-            input = input[rInt, :, :]
-            output = output[rInt, :, :]
+            #rInt = np.random.randint(1, input.shape[0], 1)
+            #input = input[rInt, :, :]
+            #output = output[rInt, :, :]
 
-            out = datagen.flow(output.reshape(1, 512, 512, 1), seed=2)
-            inn = datagen.flow(input.reshape(1, 512, 512, 1), seed=2)
+            for k in range(inputO.shape[0]):
 
-            zipper = zip(inn, out)
+                input = inputO[k, :, :]
+                output = outputO[k, :, :]
 
-            #fig = plt.figure(figsize=(8, 8))
-            #fig.add_subplot(1, 2, 1)
-            #plt.imshow(data[0][0, :, :, 0].reshape(512, 512))
-            #fig.add_subplot(1, 2, 2)
-            #plt.imshow(data[1][0, :, :, 0].reshape(512, 512))
-            #plt.show()
+                out = datagen.flow(output.reshape(1, 512, 512, 1), seed=2)
+                inn = datagen.flow(input.reshape(1, 512, 512, 1), seed=2)
 
-            #i = 0
-            #for batch in datagen.flow(output.reshape(1, 512, 512, 1), batch_size=1, save_to_dir='data/lung', save_prefix='cat', save_format='jpeg'):
-            #    i += 1
-            #    if i > 1:
-            #        break  # otherwise the generator would loop indefinitely
-            #i = 0
-            #for batch in datagen.flow(output.reshape(1, 512, 512, 1), batch_size=1, save_to_dir='data/label', save_prefix='mask', save_format='jpeg'):
-            #    i += 1
-            #    if i > 1:
-            #        break  # otherwise the generator would loop indefinitely
+                zipper = zip(inn, out)
 
-            for i in range(10):
-                data = zipper.__next__()
-                input = data[0]
-                output = data[1]
+                #fig = plt.figure(figsize=(8, 8))
+                #fig.add_subplot(1, 2, 1)
+                #plt.imshow(data[0][0, :, :, 0].reshape(512, 512))
+                #fig.add_subplot(1, 2, 2)
+                #plt.imshow(data[1][0, :, :, 0].reshape(512, 512))
+                #plt.show()
 
-                mask = output > 0.5
-                output = mask.astype(int)
+                #i = 0
+                #for batch in datagen.flow(output.reshape(1, 512, 512, 1), batch_size=1, save_to_dir='data/lung', save_prefix='cat', save_format='jpeg'):
+                #    i += 1
+                #    if i > 1:
+                #        break  # otherwise the generator would loop indefinitely
+                #i = 0
+                #for batch in datagen.flow(output.reshape(1, 512, 512, 1), batch_size=1, save_to_dir='data/label', save_prefix='mask', save_format='jpeg'):
+                #    i += 1
+                #    if i > 1:
+                #        break  # otherwise the generator would loop indefinitely
 
-                # Debug
-                if False:
-                    for i in range(input.shape[0]):
-                        fig = plt.figure(figsize=(8, 8))
-                        fig.add_subplot(1, 2, 1)
-                        plt.imshow(data[0][i, :, :, 0].reshape(512, 512))
-                        fig.add_subplot(1, 2, 2)
-                        plt.imshow(data[1][i, :, :, 0].reshape(512, 512))
-                        plt.show()
+                for i in range(10):
+                    data = zipper.__next__()
+                    input = data[0]
+                    output = data[1]
 
-                batch_input += [input]
-                batch_output += [output]
+                    mask = output > 0.5
+                    output = mask.astype(int)
 
-                size += input.shape[0]
+                    # Debug
+                    if False:
+                        for i in range(input.shape[0]):
+                            fig = plt.figure(figsize=(8, 8))
+                            fig.add_subplot(1, 2, 1)
+                            plt.imshow(data[0][i, :, :, 0].reshape(512, 512))
+                            fig.add_subplot(1, 2, 2)
+                            plt.imshow(data[1][i, :, :, 0].reshape(512, 512))
+                            plt.show()
 
+                    batch_input += [input]
+                    batch_output += [output]
+
+                    size += input.shape[0]
+        print(size)
         batch_x = np.array(batch_input).reshape(size, 512, 512, 1)
         batch_y = np.array(batch_output).reshape(size, 512, 512, 1)
 
