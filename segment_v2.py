@@ -89,7 +89,7 @@ def custom_generator(files, batch_size=1):
             #input = input[rInt, :, :]
             #output = output[rInt, :, :]
 
-            for k in range(inputO.shape[0]):
+            for k in range(1):
 
                 input = inputO[k, :, :]
                 output = outputO[k, :, :]
@@ -127,7 +127,7 @@ def custom_generator(files, batch_size=1):
 
                     # Debug
                     if False:
-                        for i in range(input.shape[0]):
+                        for i in range(1):
                             fig = plt.figure(figsize=(8, 8))
                             fig.add_subplot(1, 2, 1)
                             plt.imshow(data[0][i, :, :, 0].reshape(512, 512))
@@ -139,7 +139,6 @@ def custom_generator(files, batch_size=1):
                     batch_output += [output]
 
                     size += input.shape[0]
-        print(size)
         batch_x = np.array(batch_input).reshape(size, 512, 512, 1)
         batch_y = np.array(batch_output).reshape(size, 512, 512, 1)
 
