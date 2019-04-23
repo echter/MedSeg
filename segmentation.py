@@ -1,13 +1,24 @@
 import keras
 import os
 import numpy as np
+import pickle
+from sklearn.preprocessing import MinMaxScaler
 from keras.layers import Conv2D, UpSampling2D, MaxPooling2D, Input, Dropout, concatenate
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.preprocessing.image import ImageDataGenerator
+from keras.callbacks import ModelCheckpoint, EarlyStopping
 from matplotlib import pyplot as plt
 from sklearn.utils import class_weight
 from keras import backend as K
+import tensorflow as tf
+import random
+import pandas as pd
+import cv2
+from scipy.ndimage.interpolation import map_coordinates
+from scipy.ndimage.filters import gaussian_filter
+
+imageSize = 384
 
 def weighted_categorical_crossentropy(weights):
     """
@@ -36,61 +47,193 @@ def weighted_categorical_crossentropy(weights):
 
     return loss
 
+# Function to distort image
+def elastic_transform(image, alpha, sigma, alpha_affine, random_state=None):
+    """Elastic deformation of images as described in [Simard2003]_ (with modifications).
+    .. [Simard2003] Simard, Steinkraus and Platt, "Best Practices for
+         Convolutional Neural Networks applied to Visual Document Analysis", in
+         Proc. of the International Conference on Document Analysis and
+         Recognition, 2003.
+
+     Based on https://gist.github.com/erniejunior/601cdf56d2b424757de5
+    """
+    if random_state is None:
+        random_state = np.random.RandomState(None)
+
+    shape = image.shape
+    shape_size = shape[:2]
+
+    # Random affine
+    center_square = np.float32(shape_size) // 2
+    square_size = min(shape_size) // 3
+    pts1 = np.float32([center_square + square_size, [center_square[0]+square_size, center_square[1]-square_size], center_square - square_size])
+    pts2 = pts1 + random_state.uniform(-alpha_affine, alpha_affine, size=pts1.shape).astype(np.float32)
+    M = cv2.getAffineTransform(pts1, pts2)
+    image = cv2.warpAffine(image, M, shape_size[::-1], borderMode=cv2.BORDER_REFLECT_101)
+
+    dx = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma) * alpha
+    dy = gaussian_filter((random_state.rand(*shape) * 2 - 1), sigma) * alpha
+    #dz = np.zeros_like(dx)
+
+    #x, y, z = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]), np.arange(shape[2]))
+    x, y = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+    indices = (np.reshape(y+dy, (-1, 1)), np.reshape(x+dx, (-1, 1)))
+
+    return map_coordinates(image, indices, order=1, mode='reflect').reshape(shape)
+
 def combine_generator(gen1, gen2):
     while True:
         image = gen1.next()
         image2 = gen2.next()
-        cond = image2 > 68
-        image2 = cond.astype(int)
-        yield (image[:,:,:,0].reshape([image.shape[0], 512, 512, 1]), image2[:,:,:,0].reshape([image2.shape[0], 512, 512, 1]))
+        yield (image[:,:,:,0].reshape([image.shape[0], imageSize, imageSize, 1]), image2[:,:,:,0].reshape([image2.shape[0], imageSize, imageSize, 1]))
 
 def get_input(path):
 
-    image = np.load(("compressed_data/{}").format(path))["x"]
+    image = np.load(("{}").format(path))["x"]
     return image
 
 def get_output(path):
 
-    image = np.load(("compressed_data/{}").format(path))["y"]
+    image = np.load(("{}").format(path))["y"]
     return image
 
-def custom_generator(files, batch_size = 1):
+def custom_generator(files, batch_size=16):
+    # TODO only keep data which has more than x pixels. Currently some images with like 0 pixels are allowed which is bad
+
+    args = dict(rotation_range=0,
+        width_shift_range=0.01,
+        height_shift_range=0.01,
+        # rescale= 1. / 255,
+        shear_range=0.05,
+        zoom_range=0.05,
+        vertical_flip=True,
+        fill_mode='nearest')
+
+    datagen = ImageDataGenerator(**args)
 
     while True:
 
-        batch_path = np.random.choice(files, batch_size)
+        batch_path = []#np.random.choice(files, batch_size)
+
+        for i in range(batch_size):
+            batch_path.append(random.choice(files))
 
         batch_input = []
         batch_output = []
 
         size = 0
 
+        # TODO make this select a bunch of random slices isntead of the whole set from 1 image
         for input_path in batch_path:
+            #print(input_path)
+            inputO = get_input(input_path)
+            outputO = get_output(input_path)
 
-            input = get_input(input_path)
-            output = get_output(input_path)
+            #rInt = np.random.randint(1, input.shape[0], 1)
+            #input = input[rInt, :, :]
+            #output = output[rInt, :, :]
 
-            #preprocessing
+            input = inputO.reshape([1, imageSize, imageSize])
+            output = outputO.reshape([1, imageSize, imageSize])
 
-            batch_input += [input]
-            batch_output += [output]
+            inn = datagen.flow(input.reshape(1, imageSize, imageSize, 1), seed=2)
+            out = datagen.flow(output.reshape(1, imageSize, imageSize, 1), seed=2)
 
-            size += input.shape[0]
+            zipper = combine_generator(inn, out)
 
+            for k in range(1):
+                data = zipper.next()
+                input = data[0]
+                output = data[1]
 
-        batch_x = np.array(batch_input).reshape(size, 512, 512, 1)
-        batch_y = np.array(batch_output).reshape(size, 512, 512, 1)
+                mask = output > 0.5
+                output = mask.astype(int)
 
-        yield(batch_x, batch_y)
+                input = input.reshape(imageSize, imageSize)
+                input = input.astype(np.float32)
+                output = output.reshape(imageSize, imageSize)
+                output = output.astype(np.float32)
 
+                input_transform = elastic_transform(input, input.shape[1] * 2, input.shape[1] * 0.08, input.shape[1] * 0.08, random_state=np.random.RandomState(2))
+                output_transform = elastic_transform(output, output.shape[1] * 2, output.shape[1] * 0.08, output.shape[1] * 0.08, random_state=np.random.RandomState(2))
 
+                input = input_transform.reshape(1, imageSize, imageSize, 1)
+                output = output_transform.reshape(1, imageSize, imageSize, 1)
+
+                # Debug
+                if False:
+                    for i in range(1):
+                        fig = plt.figure(figsize=(8, 8))
+                        fig.add_subplot(1, 2, 1)
+                        plt.imshow(data[0][i, :, :, 0].reshape(imageSize, imageSize))
+                        fig.add_subplot(1, 2, 2)
+                        plt.imshow(output[i, :, :, 0].reshape(imageSize, imageSize))
+                        plt.show()
+
+                batch_input += [input]
+                batch_output += [output]
+                size += input.shape[0]
+
+            if False:
+                for i in range(1):
+                    print(input_path)
+                    fig = plt.figure(figsize=(8, 8))
+                    fig.add_subplot(1, 2, 1)
+                    plt.imshow(input.reshape(imageSize, imageSize))
+                    fig.add_subplot(1, 2, 2)
+                    plt.imshow(output.reshape(imageSize, imageSize))
+                    plt.show()
+
+                batch_input += [input]
+                batch_output += [output]
+                size += input.shape[0]
+
+        batch_x = np.array(batch_input).reshape(size, imageSize, imageSize, 1)
+        batch_y = np.array(batch_output).reshape(size, imageSize, imageSize, 1)
+
+        yield (batch_x, batch_y)
+
+def generalized_dice_loss_w(y_true, y_pred):
+
+    # Compute gen dice coef:
+    numerator = y_true*y_pred
+    numerator = K.sum(numerator,(0,1,2))
+    numerator = K.sum(numerator)
+
+    denominator = y_true+y_pred
+    denominator = K.sum(denominator,(0,1,2))
+    denominator = K.sum(denominator)
+
+    gen_dice_coef = numerator/denominator
+
+    return 1-2*gen_dice_coef
+
+x_train = []
+y_train = []
+
+counter = 0
+limit = 2000
+
+weightTest1 = 0
+weightTest0 = 0
+
+for filename in os.listdir("compressed_data_individual"):
+    if counter < limit:
+        print(("Reading image {} of {}.").format(counter+1, limit))
+        y_train.append(np.load(("compressed_data_individual/{}").format(filename))["y"])
+    counter+=1
+
+x_train = np.array(x_train)
+y_train = np.array(y_train).flatten()
+
+print(np.unique(y_train))
 
 model = keras.models.Sequential()
 
-baseFilter = 2
-epochs = 16
+baseFilter = 32
+dropout = 0.5
 
-inputs = Input((512, 512, 1))
+inputs = Input((imageSize, imageSize, 1))
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
 pool1 = MaxPooling2D(pool_size=(2, 2))(conv1)
@@ -102,12 +245,12 @@ conv3 = Conv2D(baseFilter*4, 3, activation='relu', padding='same', kernel_initia
 pool3 = MaxPooling2D(pool_size=(2, 2))(conv3)
 conv4 = Conv2D(baseFilter*8, 3, activation='relu', padding='same', kernel_initializer='he_normal')(pool3)
 conv4 = Conv2D(baseFilter*8, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv4)
-drop4 = Dropout(0.5)(conv4)
+drop4 = Dropout(dropout)(conv4)
 pool4 = MaxPooling2D(pool_size=(2, 2))(drop4)
 
 conv5 = Conv2D(baseFilter*16, 3, activation='relu', padding='same', kernel_initializer='he_normal')(pool4)
 conv5 = Conv2D(baseFilter*16, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv5)
-drop5 = Dropout(0.5)(conv5)
+drop5 = Dropout(dropout)(conv5)
 
 up6 = Conv2D(baseFilter*8, 2, activation='relu', padding='same', kernel_initializer='he_normal')(UpSampling2D(size=(2, 2))(drop5))
 merge6 = concatenate([drop4, up6], axis=3)
@@ -129,11 +272,11 @@ merge9 = concatenate([conv1, up9], axis=3)
 conv9 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(merge9)
 conv9 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
 conv9 = Conv2D(2, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv9)
-conv10 = Conv2D(1, 1, activation='sigmoid')(conv9)
+conv10 = Conv2D(1, 1, activation="sigmoid")(conv9)
 
 model = Model(input=inputs, output=conv10)
 
-model.compile(optimizer=Adam(lr=1e-4), loss='binary_crossentropy', metrics=['accuracy'])
+model.compile(optimizer=Adam(lr=1e-5), loss=generalized_dice_loss_w, metrics=['accuracy'])#, decay=(1e-6))
 
 args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
@@ -143,7 +286,7 @@ args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
     width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
     height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
-    horizontal_flip=True,  # randomly flip images
+    horizontal_flip=False,  # randomly flip images
     vertical_flip=False)
 
 if False:
@@ -163,14 +306,16 @@ if False:
     y_val = y_val.flow_from_directory('data/val_mask', class_mode=None, seed=seed, target_size=(512,512))
     val_generator = combine_generator(x_val, y_val)
 
+#class_weights = [1, 100]
 
-w = [1, 25]
-batch_size = 16
+batch_size = 4
+epochs = 512
 
 names = []
+for filename in os.listdir("compressed_data_individual"):
+    names.append(("compressed_data_individual/{}").format(filename))
 
-for filename in os.listdir("compressed_data"):
-    names.append(filename)
+steps = len(names) / batch_size
 
 if False:
     for i in range(50):
@@ -188,20 +333,64 @@ if False:
                     plt.imshow(img[1][i-1, :, :, 0])
                     #print(np.unique(img[1][i-1, :, :, 0]))
         plt.show()
+if False:
+    while True:
+        img = custom_generator(names).next()
 
-history = model.fit_generator(custom_generator(names), batch_size, epochs=epochs, class_weight=w)
+        input = img[0][0,:,:].reshape(imageSize, imageSize)
+        im_merge_t = elastic_transform(input, input.shape[1] * 2, input.shape[1] * 0.08, input.shape[1] * 0.08, random_state=np.random.RandomState(2))
 
-if True:
+        fig=plt.figure(figsize=(8, 8))
+        fig.add_subplot(1,2,1)
+        plt.imshow(im_merge_t)
+
+        input = img[1][0,:,:].reshape(imageSize, imageSize)
+        input = input.astype(np.float32)
+        im_merge_t = elastic_transform(input, input.shape[1] * 2, input.shape[1] * 0.08, input.shape[1] * 0.08, random_state=np.random.RandomState(2))
+
+        fig.add_subplot(1,2,2)
+        plt.imshow(im_merge_t)
+        plt.show()
+
+validation = []
+for filename in os.listdir("compressed_validation_individual"):
+    validation.append(("compressed_validation_individual/{}").format(filename))
+
+#class_weights = [1, weightTest0/weightTest1]
+class_weights = class_weight.compute_class_weight('balanced', np.unique(y_train), y_train)
+print("="*80)
+print(class_weight)
+print("="*80)
+
+checkpointer = ModelCheckpoint("best_v5.sav", monitor='val_loss',
+    verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+earlyStopper = EarlyStopping(monitor='val_loss', min_delta=0,
+    patience=15, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
+history = model.fit_generator(custom_generator(names, batch_size=batch_size), steps,
+    epochs=epochs, validation_data=custom_generator(validation, batch_size=batch_size),
+    validation_steps=2, shuffle=True, callbacks=[checkpointer, earlyStopper])
+
+with open('history/trainHistoryDict_v4', 'wb') as file_pi:
+    pickle.dump(history.history, file_pi)
+
+if False:
     im = x_train[405, :, :, 0]
     print(im.shape)
     im = im.reshape(1, 512, 512, 1)
     print(im.shape)
     pred = model.predict(im)
+    cond = pred > 0.5
+    pred = cond.astype(int)
     print(pred.shape)
+    fig=plt.figure(figsize=(8, 8))
+    fig.add_subplot(1,3,1)
+    plt.imshow(x_train[405,:,:,0].reshape(512, 512))
+    fig.add_subplot(1,3,2)
     plt.imshow(y_train[405,:,:,0].reshape(512, 512))
-    plt.show()
+    fig.add_subplot(1,3,3)
     plt.imshow(pred.reshape(512, 512))
     plt.show()
+    print(np.unique(pred))
 
 plt.plot(history.history['loss'])
 plt.plot(history.history['val_loss'])
@@ -210,3 +399,23 @@ plt.ylabel('loss')
 plt.xlabel('epoch')
 plt.legend(['vgg_train', 'vgg_val', 'my_train', 'my_val'], loc='upper left')
 plt.show()
+
+if True:
+    for k in range(10):
+        og = custom_generator(validation).next()
+        for i in range(og[0].shape[0]):
+            im = og[0][i,:,:,0]
+            pred = model.predict(im.reshape(1,imageSize,imageSize,1))
+            #print(np.unique(pred, return_counts=True))
+            cond = pred > 0.5
+            pred = cond.astype(int)
+            #print(np.unique(pred, return_counts=True))
+            #if 1 in pred:
+            fig=plt.figure(figsize=(8, 8))
+            fig.add_subplot(1,3,1)
+            plt.imshow(im.reshape(imageSize, imageSize))
+            fig.add_subplot(1,3,2)
+            plt.imshow(og[1][i,:,:,0].reshape(imageSize, imageSize))
+            fig.add_subplot(1,3,3)
+            plt.imshow(pred.reshape(imageSize, imageSize))
+            plt.show()

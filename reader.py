@@ -5,6 +5,9 @@ from nibabel.testing import data_path
 import json
 import cv2
 from matplotlib import pyplot as plt
+from PIL import Image
+from sklearn.preprocessing import normalize
+import operator
 
 def generate_train_data():
     img_again = nib.load('./imagesTr/lung_001.nii.gz')
@@ -39,8 +42,10 @@ def generate_train_data():
                 #cv2.imshow("i", x_train[i, :, :].reshape([512, 512]))
                 #plt.show()
                 if 1 in y_train[i, :, :]:
-                    plt.imsave(("data/img/0/{}_slice{}").format(row["image"].split("/")[-1].split(".")[0], i), x_train[i, :, :].reshape([512, 512]))
-                    plt.imsave(("data/mask/0/{}_slice{}").format(row["image"].split("/")[-1].split(".")[0], i), y_train[i, :, :].reshape([512, 512]))
+                    x = resizeimage.resize_cover(x_train[i, :, :].reshape([512, 512]), [256, 256])
+                    y = resizeimage.resize_cover(y_train[i, :, :].reshape([512, 512]), [256, 256])
+                    plt.imsave(("data/img/0/{}_slice{}").format(row["image"].split("/")[-1].split(".")[0], i), x)
+                    plt.imsave(("data/mask/0/{}_slice{}").format(row["image"].split("/")[-1].split(".")[0], i), y)
                     #print(x_train[i, :, :].reshape([512, 512]).shape)
                 if i % 10 == 0:
                     print(i)
@@ -90,6 +95,12 @@ def generate_validation_data():
             #np.savez_compressed(("data/x_train/{}").format(row["image"].split("/")[-1]), data=x_train)
             #np.savez_compressed(("data/y_train/{}").format(row["image"].split("/")[-1]), data=y_train)
 
+def cropND(img, bounding):
+    start = tuple(map(lambda a, da: a//2-da//2, img.shape, bounding))
+    end = tuple(map(operator.add, start, bounding))
+    slices = tuple(map(slice, start, end))
+    return img[slices]
+
 def convert_training_to_compressed_numpy():
     img_again = nib.load('./imagesTr/lung_001.nii.gz')
     print(img_again.shape)
@@ -112,9 +123,25 @@ def convert_training_to_compressed_numpy():
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:
                     counts = dict(zip(np.unique(label[:,:,i], return_counts=True)[0], np.unique(label[:,:,i], return_counts=True)[1]))
-                    if (counts[1] > 500):
-                        x_train = np.array(img[:,:,i])
-                        y_train = np.array(label[:,:,i])
+                    if (counts[1] > 750):
+
+                        x = cropND(img[:,:,i].reshape([512, 512]), (384, 384))
+                        y = cropND(label[:,:,i].reshape([512, 512]), (384, 384))
+
+                        x_train = np.array(x)
+                        y_train = np.array(y)
+
+                        mask = y_train > 0.5
+                        y_train = mask.astype(int)
+
+                        #np.place(x_train, x_train > -600, -600)
+                        #np.place(x_train, x_train < -700, -700)
+                        x_train = x_train + 1024
+                        x_train = x_train / np.amax(x_train)
+
+                        #plt.imshow(x_train)
+                        #plt.show()
+
                         np.savez_compressed(("compressed_data_individual/{}_{}").format(row["image"].split("/")[-1], i), x=x_train, y=y_train)
 
             counter += 1
@@ -134,9 +161,25 @@ def convert_training_to_compressed_numpy():
             for i in range(img.shape[2]):
                 if 1 in label[:,:,i]:
                     counts = dict(zip(np.unique(label[:,:,i], return_counts=True)[0], np.unique(label[:,:,i], return_counts=True)[1]))
-                    if (counts[1] > 500):
-                        x_train = np.array(img[:,:,i])
-                        y_train = np.array(label[:,:,i])
+                    if (counts[1] > 750):
+
+                        x = cropND(img[:,:,i].reshape([512, 512]), (384, 384))
+                        y = cropND(label[:,:,i].reshape([512, 512]), (384, 384))
+
+                        x_train = np.array(x)
+                        y_train = np.array(y)
+
+                        mask = y_train > 0.5
+                        y_train = mask.astype(int)
+
+                        #np.place(x_train, x_train > -600, -600)
+                        #np.place(x_train, x_train < -700, -700)
+                        x_train = x_train + 1024
+                        x_train = x_train / np.amax(x_train)
+
+                        #plt.imshow(x_train)
+                        #plt.show()
+
                         np.savez_compressed(("compressed_validation_individual/{}_{}").format(row["image"].split("/")[-1], i), x=x_train, y=y_train)
 
             counter += 1

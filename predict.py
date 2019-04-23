@@ -4,6 +4,27 @@ from matplotlib import pyplot as plt
 import numpy as np
 import pickle
 import os
+from keras import backend as K
+
+imageSize = 384
+
+def generalized_dice_loss_w(y_true, y_pred):
+
+    # Compute gen dice coef:
+    numerator = y_true*y_pred
+    numerator = K.sum(numerator,(0,1,2))
+    numerator = K.sum(numerator)
+
+    denominator = y_true+y_pred
+    denominator = K.sum(denominator,(0,1,2))
+    denominator = K.sum(denominator)
+
+    gen_dice_coef = numerator/denominator
+
+    return 1-2*gen_dice_coef
+
+import keras.losses
+keras.losses.generalized_dice_loss_w = generalized_dice_loss_w
 
 def get_input(path):
 
@@ -14,7 +35,7 @@ def combine_generator(gen1, gen2):
     while True:
         image = gen1.next()
         image2 = gen2.next()
-        yield (image[:,:,:,0].reshape([image.shape[0], 512, 512, 1]), image2[:,:,:,0].reshape([image2.shape[0], 512, 512, 1]))
+        yield (image[:,:,:,0].reshape([image.shape[0], 256, 256, 1]), image2[:,:,:,0].reshape([image2.shape[0], 256, 256, 1]))
 
 def get_output(path):
 
@@ -46,46 +67,20 @@ def custom_generator(files, batch_size=16):
 
         # TODO make this select a bunch of random slices isntead of the whole set from 1 image
         for input_path in batch_path:
+
             inputO = get_input(input_path)
             outputO = get_output(input_path)
 
-            #rInt = np.random.randint(1, input.shape[0], 1)
-            #input = input[rInt, :, :]
-            #output = output[rInt, :, :]
+            input = inputO.reshape([1, imageSize, imageSize])
+            output = outputO.reshape([1, imageSize, imageSize])
 
-            input = inputO.reshape([1, 512, 512])
-            output = outputO.reshape([1, 512, 512])
+            batch_input += [input]
+            batch_output += [output]
 
-            inn = datagen.flow(input.reshape(1, 512, 512, 1), seed=2)
-            out = datagen.flow(output.reshape(1, 512, 512, 1), seed=2)
+            size += input.shape[0]
 
-            zipper = combine_generator(inn, out)
-
-            for k in range(3):
-                data = zipper.next()
-                input = data[0]
-                output = data[1]
-
-                #mask = output > 0.5
-                #output = mask.astype(int)
-
-                # Debug
-                if False:
-                    for i in range(1):
-                        fig = plt.figure(figsize=(8, 8))
-                        fig.add_subplot(1, 2, 1)
-                        plt.imshow(data[0][i, :, :, 0].reshape(512, 512))
-                        fig.add_subplot(1, 2, 2)
-                        plt.imshow(data[1][i, :, :, 0].reshape(512, 512))
-                        plt.show()
-
-                batch_input += [input]
-                batch_output += [output]
-
-                size += input.shape[0]
-
-        batch_x = np.array(batch_input).reshape(size, 512, 512, 1)
-        batch_y = np.array(batch_output).reshape(size, 512, 512, 1)
+        batch_x = np.array(batch_input).reshape(size, imageSize, imageSize, 1)
+        batch_y = np.array(batch_output).reshape(size, imageSize, imageSize, 1)
 
         yield (batch_x, batch_y)
 
@@ -93,7 +88,7 @@ validation = []
 for filename in os.listdir("compressed_validation_individual"):
     validation.append(("compressed_validation_individual/{}").format(filename))
 
-model = load_model('best_v3.sav')
+model = load_model('best_v5.sav')
 
 if True:
     with open("history/trainHistoryDict", "rb") as input_file:
@@ -111,15 +106,17 @@ if True:
         og = custom_generator(validation).next()
         for i in range(og[0].shape[0]):
             im = og[0][i,:,:,0]
-            pred = model.predict(im.reshape(1,512,512,1))
-            cond = pred > 0.5
+            pred = model.predict(im.reshape(1,imageSize,imageSize,1))
+            print(np.unique(pred, return_counts=True))
+            cond = pred > 0.0
             pred = cond.astype(int)
-            if 1 in pred:
-                fig=plt.figure(figsize=(8, 8))
-                fig.add_subplot(1,3,1)
-                plt.imshow(im.reshape(512, 512))
-                fig.add_subplot(1,3,2)
-                plt.imshow(og[1][i,:,:,0].reshape(512, 512))
-                fig.add_subplot(1,3,3)
-                plt.imshow(pred.reshape(512, 512))
-                plt.show()
+            print(np.unique(pred, return_counts=True)[0])
+            #if 1 in pred:
+            fig=plt.figure(figsize=(8, 8))
+            fig.add_subplot(1,3,1)
+            plt.imshow(im.reshape(imageSize, imageSize))
+            fig.add_subplot(1,3,2)
+            plt.imshow(og[1][i,:,:,0].reshape(imageSize, imageSize))
+            fig.add_subplot(1,3,3)
+            plt.imshow(pred.reshape(imageSize, imageSize))
+            plt.show()
