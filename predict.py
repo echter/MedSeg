@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use('Agg')
+
 from keras.models import load_model
 from keras.preprocessing.image import ImageDataGenerator
 from matplotlib import pyplot as plt
