@@ -102,9 +102,10 @@ if True:
     plt.ylabel('loss')
     plt.xlabel('epoch')
     plt.legend(['vgg_train', 'vgg_val', 'my_train', 'my_val'], loc='upper left')
-    plt.show()
+    plt.savefig("v7.png")
+    #plt.show()
 
-if True:
+if False:
     for k in range(50):
         og = custom_generator(validation).next()
         for i in range(og[0].shape[0]):

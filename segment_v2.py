@@ -268,7 +268,7 @@ conv10 = Conv2D(1, 1, activation="sigmoid")(conv9)
 
 model = Model(input=inputs, output=conv10)
 
-model.compile(optimizer=Adam(lr=1e-5, decay=1e-9), loss=generalized_dice_loss_w, metrics=['accuracy'])#, decay=(1e-6))
+model.compile(optimizer=Adam(lr=1e-5), loss=generalized_dice_loss_w, metrics=['accuracy'])#, decay=(1e-6))
 
 args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
@@ -359,9 +359,21 @@ checkpointer = ModelCheckpoint("best_v7.sav", monitor='val_loss',
     verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
 earlyStopper = EarlyStopping(monitor='val_loss', min_delta=0,
     patience=20, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
+
+
+def lr_scheduler(epoch, lr):
+    decay_rate = 0.9
+    decay_step = 4
+    if epoch % decay_step == 0 and epoch:
+        return lr * decay_rate
+    return lr
+
+decay = keras.callbacks.LearningRateScheduler(lr_scheduler, verbose=1)
+
+
 history = model.fit_generator(custom_generator(names, batch_size=batch_size), steps,
     epochs=epochs, validation_data=validation_custom_generator(validation, batch_size=batch_size*16),
-    validation_steps=2, shuffle=True, callbacks=[checkpointer, earlyStopper])
+    validation_steps=2, shuffle=True, callbacks=[checkpointer, earlyStopper, decay])
 
 with open('history/trainHistoryDict_v7', 'wb') as file_pi:
     pickle.dump(history.history, file_pi)
