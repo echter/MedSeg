@@ -223,6 +223,8 @@ model = keras.models.Sequential()
 baseFilter = 32
 dropout = 0.65
 
+# Keras U-Net implementation
+# Base model taken from https://github.com/zhixuhao/unet/blob/master/model.py
 inputs = Input((imageSize, imageSize, 1))
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(conv1)
