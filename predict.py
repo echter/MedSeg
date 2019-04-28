@@ -5,6 +5,9 @@ import numpy as np
 import pickle
 import os
 from keras import backend as K
+from skimage import measure
+import cv2
+import scipy.misc
 
 imageSize = 384
 
@@ -42,7 +45,7 @@ def get_output(path):
     image = np.load(("{}").format(path))["y"]
     return image
 
-def custom_generator(files, batch_size=16):
+def custom_generator(files, batch_size=1):
     # TODO only keep data which has more than x pixels. Currently some images with like 0 pixels are allowed which is bad
 
     args = dict(rotation_range=0,
@@ -102,21 +105,46 @@ if True:
     plt.show()
 
 if True:
-    for k in range(10):
+    for k in range(50):
         og = custom_generator(validation).next()
         for i in range(og[0].shape[0]):
             im = og[0][i,:,:,0]
             pred = model.predict(im.reshape(1,imageSize,imageSize,1))
-            print(np.unique(pred, return_counts=True))
-            cond = pred > 0.0
+
+            cond = pred > np.amax(pred) * 0.8
             pred = cond.astype(int)
-            print(np.unique(pred, return_counts=True)[0])
-            #if 1 in pred:
-            fig=plt.figure(figsize=(8, 8))
-            fig.add_subplot(1,3,1)
+
+            pred = np.array(pred.reshape(imageSize, imageSize))
+            pred = pred.astype(np.uint8)
+
+            contours, hierarchy = cv2.findContours(pred, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+
+            area=0
+            contourList = 0
+            for c in contours:
+                if (cv2.contourArea(c) > area):
+                    area = cv2.contourArea(c)
+                    contourList = c
+
+            fig=plt.figure(figsize=(16, 16))
+
+            ax1 = fig.add_subplot(1,4,1)
             plt.imshow(im.reshape(imageSize, imageSize))
-            fig.add_subplot(1,3,2)
+            ax1.set_title("Input")
+
+            ax2 = fig.add_subplot(1,4,2)
             plt.imshow(og[1][i,:,:,0].reshape(imageSize, imageSize))
-            fig.add_subplot(1,3,3)
+            ax2.set_title("Label")
+
+            ax4 = fig.add_subplot(1,4,4)
             plt.imshow(pred.reshape(imageSize, imageSize))
+            ax4.set_title("Prediction")
+
+            ax3 = fig.add_subplot(1,4,3)
+            im = np.zeros((imageSize, imageSize))
+            if (np.amax(pred) > 0):
+                cv2.fillPoly(im, pts=[contourList], color=(255,255,255))
+            plt.imshow(im)
+            ax3.set_title("Post processed")
+
             plt.show()

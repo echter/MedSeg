@@ -125,6 +125,9 @@ def custom_generator(files, batch_size=16):
 
         # TODO make this select a bunch of random slices isntead of the whole set from 1 image
         for input_path in batch_path:
+
+            randomState = np.random.randint(0, 1000, 1)
+            #print(input_path)
             #print(input_path)
             inputO = get_input(input_path)
             outputO = get_output(input_path)
@@ -134,14 +137,45 @@ def custom_generator(files, batch_size=16):
             output = outputO.reshape(imageSize, imageSize)
             output = output.astype(np.float32)
 
-            input_transform = elastic_transform(input, input.shape[1] * 2, input.shape[1] * 0.08, input.shape[1] * 0.08, random_state=np.random.RandomState(2))
-            output_transform = elastic_transform(output, output.shape[1] * 2, output.shape[1] * 0.08, output.shape[1] * 0.08, random_state=np.random.RandomState(2))
+            input_transform = elastic_transform(input, input.shape[1] * 2, input.shape[1] * 0.08, input.shape[1] * 0.08, random_state=np.random.RandomState(randomState))
+            output_transform = elastic_transform(output, output.shape[1] * 2, output.shape[1] * 0.08, output.shape[1] * 0.08, random_state=np.random.RandomState(randomState))
 
             mask = output_transform > 0.5
             output_transform = mask.astype(int)
 
             batch_input += [input_transform]
             batch_output += [output_transform]
+            size += 1
+
+        batch_x = np.array(batch_input).reshape(size, imageSize, imageSize, 1)
+        batch_y = np.array(batch_output).reshape(size, imageSize, imageSize, 1)
+
+        yield (batch_x, batch_y)
+
+def validation_custom_generator(files, batch_size=16):
+
+    while True:
+
+        batch_path = []#np.random.choice(files, batch_size)
+
+        for i in range(batch_size):
+            batch_path.append(random.choice(files))
+
+        batch_input = []
+        batch_output = []
+
+        size = 0
+
+        # TODO make this select a bunch of random slices isntead of the whole set from 1 image
+        for input_path in batch_path:
+
+            #print(input_path)
+
+            input = get_input(input_path)
+            output = get_output(input_path)
+
+            batch_input += [input]
+            batch_output += [output]
             size += 1
 
         batch_x = np.array(batch_input).reshape(size, imageSize, imageSize, 1)
@@ -187,7 +221,7 @@ print(np.unique(y_train))
 model = keras.models.Sequential()
 
 baseFilter = 32
-dropout = 0.5
+dropout = 0.65
 
 inputs = Input((imageSize, imageSize, 1))
 conv1 = Conv2D(baseFilter, 3, activation='relu', padding='same', kernel_initializer='he_normal')(inputs)
@@ -232,7 +266,7 @@ conv10 = Conv2D(1, 1, activation="sigmoid")(conv9)
 
 model = Model(input=inputs, output=conv10)
 
-model.compile(optimizer=Adam(lr=1e-5), loss=generalized_dice_loss_w, metrics=['accuracy'])#, decay=(1e-6))
+model.compile(optimizer=Adam(lr=1e-5, decay=1e-9), loss=generalized_dice_loss_w, metrics=['accuracy'])#, decay=(1e-6))
 
 args = dict(featurewise_center=False,  # set input mean to 0 over the dataset
     samplewise_center=False,  # set each sample mean to 0
@@ -264,7 +298,7 @@ if False:
 
 #class_weights = [1, 100]
 
-batch_size = 3
+batch_size = 4
 epochs = 512
 
 names = []
@@ -275,18 +309,19 @@ steps = len(names) / batch_size
 
 if False:
     for i in range(50):
-        img = custom_generator(names).next()
+        img = validation_custom_generator(names, batch_size=1).next()
+        #img = custom_generator(names, batch_size=1).next()
         print(img[0].shape)
         fig=plt.figure(figsize=(8, 8))
         for i in range(img[0].shape[0]):
             if i < 25:
-                if i % 2 == 0:
-                    fig.add_subplot(5,5,i+1)
-                    plt.imshow(img[0][i, :, :, 0])
+                #if i % 2 == 0:
+                fig.add_subplot(1,2,1)
+                plt.imshow(img[0][i, :, :, 0])
                     #print(img[0][i, :, :, 0])
-                else:
-                    fig.add_subplot(5,5,i+1)
-                    plt.imshow(img[1][i-1, :, :, 0])
+                #else:
+                fig.add_subplot(1,2,2)
+                plt.imshow(img[1][i-1, :, :, 0])
                     #print(np.unique(img[1][i-1, :, :, 0]))
         plt.show()
 if False:
@@ -318,15 +353,15 @@ print("="*80)
 print(class_weight)
 print("="*80)
 
-checkpointer = ModelCheckpoint("best_v5.sav", monitor='val_loss',
+checkpointer = ModelCheckpoint("best_v7.sav", monitor='val_loss',
     verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
 earlyStopper = EarlyStopping(monitor='val_loss', min_delta=0,
-    patience=15, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
+    patience=20, verbose=0, mode='auto', baseline=None, restore_best_weights=True)
 history = model.fit_generator(custom_generator(names, batch_size=batch_size), steps,
-    epochs=epochs, validation_data=custom_generator(validation, batch_size=batch_size*2),
+    epochs=epochs, validation_data=validation_custom_generator(validation, batch_size=batch_size*16),
     validation_steps=2, shuffle=True, callbacks=[checkpointer, earlyStopper])
 
-with open('history/trainHistoryDict_v4', 'wb') as file_pi:
+with open('history/trainHistoryDict_v7', 'wb') as file_pi:
     pickle.dump(history.history, file_pi)
 
 if False:
