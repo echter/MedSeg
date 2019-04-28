@@ -1,5 +1,5 @@
-import matplotlib
-matplotlib.use('Agg')
+#import matplotlib
+#matplotlib.use('Agg')
 
 from keras.models import load_model
 from keras.preprocessing.image import ImageDataGenerator
@@ -94,9 +94,9 @@ validation = []
 for filename in os.listdir("compressed_validation_individual"):
     validation.append(("compressed_validation_individual/{}").format(filename))
 
-model = load_model('best_v5.sav')
+model = load_model('best_v7.sav')
 
-if True:
+if False:
     with open("history/trainHistoryDict_v7", "rb") as input_file:
         history = pickle.load(input_file)
     plt.plot(history['loss'])
@@ -108,9 +108,9 @@ if True:
     plt.savefig("v7.png")
     #plt.show()
 
-if False:
+if True:
     for k in range(50):
-        og = custom_generator(validation).next()
+        og = custom_generator(validation).__next__()
         for i in range(og[0].shape[0]):
             im = og[0][i,:,:,0]
             pred = model.predict(im.reshape(1,imageSize,imageSize,1))
@@ -146,8 +146,12 @@ if False:
 
             ax3 = fig.add_subplot(1,4,3)
             im = np.zeros((imageSize, imageSize))
-            if (np.amax(pred) > 0):
-                cv2.fillPoly(im, pts=[contourList], color=(255,255,255))
+            try:
+                if (np.amax(pred) > np.amax(pred) * 0.8):
+                    cv2.fillPoly(im, pts=[contourList], color=(255,255,255))
+            except:
+                print("Could not fill")
+
             plt.imshow(im)
             ax3.set_title("Post processed")
 
