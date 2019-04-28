@@ -97,7 +97,7 @@ for filename in os.listdir("compressed_validation_individual"):
 model = load_model('best_v5.sav')
 
 if True:
-    with open("history/trainHistoryDict", "rb") as input_file:
+    with open("history/trainHistoryDict_v7", "rb") as input_file:
         history = pickle.load(input_file)
     plt.plot(history['loss'])
     plt.plot(history['val_loss'])
